@@ -23,8 +23,6 @@ public class Main {
     public static void main(String[] args) throws IOException {
         CompletableFuture.runAsync(() -> {
             try {
-                System.out.println("Hello world!");
-
                 ActorSystem system = ActorSystem.create("AkkaActorDemo");
 
                 ActorRef router = system.actorOf(Props.create(RouterActor.class), "router");
@@ -62,6 +60,7 @@ public class Main {
                     ActorRef recipient = (i % 3 == 0) ? groups.get(i % 3) : users.get((i + 1) % 10);
 
                     SendMessage sendMessage = createSendMessage(sender.path().name(), recipient.path().name(), "Message " + i);
+
                     routerPool.tell(sendMessage, ActorRef.noSender());
 
                     String edgeId = sender.path().name() + "->" + recipient.path().name();
