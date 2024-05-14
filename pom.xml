@@ -47,6 +47,12 @@
             <version>3.2.16</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-serialization-jackson_2.13</artifactId>
+            <version>2.6.16</version>
+        </dependency>
+
         <!-- GraphStream -->
         <dependency>
             <groupId>org.graphstream</groupId>

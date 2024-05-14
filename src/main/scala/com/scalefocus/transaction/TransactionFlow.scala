@@ -3,7 +3,7 @@ package com.scalefocus.transaction
 import akka.NotUsed
 import akka.actor.Status.{Failure, Success}
 import akka.actor.{ActorSystem, Cancellable, Status}
-import akka.stream.ClosedShape
+import akka.stream.{ClosedShape, FlowShape}
 import akka.stream.scaladsl._
 
 import scala.concurrent.duration._
@@ -29,16 +29,8 @@ class TransactionFlow {
       tick = ()
     ).map(_ => randomTransaction())
 
-    val printAllSink: Sink[Transaction, _] = Sink.foreach[Transaction](transaction => println(s"All Transactions: $transaction"))
-
-    val filteredTransactions: Flow[Transaction, Transaction, NotUsed] = Flow[Transaction].filter(_.amount > 500)
-
-    val printSink: Sink[Transaction, _] = Sink.foreach[Transaction](transaction => println(s"Filtered Transaction: $transaction"))
-
     val highValueTag: Flow[Transaction, Transaction, NotUsed] = Flow[Transaction].filter(_.amount > 500).wireTap(t => println(s"High: $t")).map(t => t)
     val lowValueTag: Flow[Transaction, Transaction, NotUsed] = Flow[Transaction].filter(_.amount <= 500).wireTap(t => println(s"Low: $t")).map(t => t)
-
-//    val printAllTransactions: Sink[Transaction, akka.NotUsed] = Sink.foreach[Transaction](t => println(s"All Transactions: $t"))
 
     val transactionProcessor = system.actorOf(TransactionProcessor.props, "transactionProcessor")
 
@@ -50,29 +42,26 @@ class TransactionFlow {
       onFailureMessage = Status.Failure(_)
     )
 
-    val graph = GraphDSL.create() { implicit builder =>
+    val compositeFlow: Flow[Transaction, Transaction, NotUsed] = Flow.fromGraph(GraphDSL.create() { implicit builder =>
       import GraphDSL.Implicits._
 
-      // Add a Broadcast stage with 3 outputs
+      // Add a Broadcast stage with 2 outputs
       val broadcast = builder.add(Broadcast[Transaction](2) )
 
       // Add a Merge stage with 2 inputs for Strings
       val merge = builder.add(Merge[Transaction](2) )
 
-      // Connect components in the graph
-      transactionSource ~> broadcast.in
-
       broadcast.out(0) ~> highValueTag ~> merge.in(0)
       broadcast.out(1) ~> lowValueTag ~> merge.in(1)
-//      broadcast.out(2) ~> Sink.foreach[Transaction](t => println(s"Current Transactions: $t"))
 
-      merge.out ~> sink
+      FlowShape(broadcast.in, merge.out)
+    })
 
-      ClosedShape
-    }
+    val runnableGraph: RunnableGraph[Cancellable] = transactionSource
+      .via(compositeFlow)
+      .toMat(sink)(Keep.left)
 
-    val runnable = RunnableGraph.fromGraph(graph)
-    runnable.run
+    runnableGraph.run()
   }
 }
 

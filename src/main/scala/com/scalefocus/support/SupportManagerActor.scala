@@ -1,9 +1,9 @@
 package com.scalefocus.support
 
-import akka.actor.{Actor, ActorRef, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import com.scalefocus.TicketMessages.{Ticket, TicketFailed}
 
-class SupportManagerActor(teams:  scala.collection.mutable.Map[String, ActorRef]) extends Actor {
+class SupportManagerActor(teams:  scala.collection.mutable.Map[String, ActorRef]) extends Actor with ActorLogging {
 
   private val workerId = self.path.name
 
@@ -11,7 +11,7 @@ class SupportManagerActor(teams:  scala.collection.mutable.Map[String, ActorRef]
     case ticket @ Ticket(ticketId, category, details) =>
       teams.get(category) match {
         case Some(team) => team ! ticket
-        case None => println(s"No team available for category: $category")
+        case None => log.info(s"No team available for category: $category")
       }
   }
 }

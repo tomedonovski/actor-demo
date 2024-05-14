@@ -1,5 +1,7 @@
 package com.scalefocus
 
+import akka.actor.Props
+
 object TicketMessages {
   sealed trait TicketMessage
 

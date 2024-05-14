@@ -1,25 +1,23 @@
 package com.scalefocus.support
 
-import akka.actor.{Actor, Props}
+import akka.actor.{Actor, ActorLogging, Props}
 import com.scalefocus.TicketMessages.{Ticket, TicketCompleted, TicketFailed}
 
-class SupportWorkerActor extends Actor {
+class SupportWorkerActor extends Actor with ActorLogging {
   val workerId: String = self.path.name
 
   override def receive: Receive = {
     case Ticket(ticketId, category, details) =>
-      try {
         if (details.contains("fail")) {
-          sender ! TicketFailed(workerId, ticketId, details)
+          throw new RuntimeException("Simulated failure")
         } else {
           val result = s"Resolved ticket in $category: $details"
-          println(s"$workerId completed ticket $ticketId")
+          log.info(s"$workerId completed ticket $ticketId")
           sender() ! TicketCompleted(workerId, ticketId, result)
         }
-      } catch {
-        case e: Exception =>
-          sender() ! TicketFailed(workerId, ticketId, e.getMessage)
-      }
+
+    case other =>
+      println(s"Received other: $other")
   }
 
   def props(): Props = Props[SupportWorkerActor]

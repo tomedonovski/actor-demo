@@ -1,18 +1,29 @@
 package com.scalefocus.support
 
-import akka.actor.SupervisorStrategy.{Restart, Stop}
-import akka.actor.{Actor, ActorRef, OneForOneStrategy, Props, SupervisorStrategy}
+import akka.actor.SupervisorStrategy.{Escalate, Restart}
+import akka.actor.{Actor, ActorLogging, ActorRef, OneForOneStrategy, Props, SupervisorStrategy}
 import com.scalefocus.TicketMessages.{Ticket, TicketCompleted, TicketFailed}
+import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 
-class SupportTeamActor(category: String, workers: Seq[ActorRef]) extends Actor {
+class SupportTeamActor(category: String, workerProps: Props, numberOfWorkers: Int) extends Actor with ActorLogging {
   private var nextWorker = 0
-  private val maxRetries = 3
-  private val retryInterval = scala.concurrent.duration.Duration("10 seconds")
+  private val maxRetries = 1
+  private val retryInterval = 10.seconds
   private var retryCount = Map.empty[String, Int]
 
-  override def supervisorStrategy: SupervisorStrategy = OneForOneStrategy(maxNrOfRetries = maxRetries) {
-    case _: Exception => Restart
-    case _ => Stop
+  // Create worker actors
+  private val workers: Seq[ActorRef] = (1 to numberOfWorkers).map { i =>
+    context.actorOf(workerProps, s"worker-$i")
+  }
+
+  override def supervisorStrategy: SupervisorStrategy = OneForOneStrategy(
+    maxNrOfRetries = maxRetries,
+    withinTimeRange = 1.minute
+  ) {
+    case exception : RuntimeException =>
+      log.error(s"Restarting child due to RuntimeException with value: $exception")
+      Restart
+    case _: Exception => Escalate
   }
 
   override def receive: Receive = {
@@ -24,21 +35,25 @@ class SupportTeamActor(category: String, workers: Seq[ActorRef]) extends Actor {
 
     case TicketCompleted(workerId, ticketId, result) =>
       retryCount -= ticketId
-      println(s"$category Team: Worker $workerId completed ticket $ticketId with result: $result")
+      log.info(s"$category Team: Worker $workerId completed ticket $ticketId with result: $result")
 
     case TicketFailed(workerId, ticketId, reason) =>
-      println(s"$category Team: Worker $workerId failed ticket $ticketId due to $reason")
+      log.info(s"$category Team: Worker $workerId failed ticket $ticketId due to $reason")
       val retryAttempts = retryCount.getOrElse(ticketId, 0)
       if (retryAttempts < maxRetries) {
         retryCount += (ticketId -> (retryAttempts + 1))
-        self ! Ticket(ticketId, category, s"Retry for task that failed: $reason")
+        val retryTicket = Ticket(ticketId, category, s"Retry for task that failed: $reason")
+        log.info(s"Retrying ticket: $retryTicket")
+//        context.system.scheduler.scheduleOnce(retryInterval, self, retryTicket)(context.dispatcher)
       } else {
-        println(s"Exceeded max retries for ticket $ticketId")
+        log.info(s"Exceeded max retries $retryCount for ticket $ticketId")
       }
-  }
 
+    case other =>
+      log.info(s"Handling exception: $other")
+  }
 }
 
 object SupportTeamActor {
-  def props(category: String, workers: Seq[ActorRef]): Props = Props(new SupportTeamActor(category, workers))
+  def props(category: String, workerProps: Props, numberOfWorkers: Int): Props = Props(new SupportTeamActor(category, workerProps, numberOfWorkers))
 }
