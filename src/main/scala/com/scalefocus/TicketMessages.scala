@@ -11,9 +11,9 @@ object TicketMessages {
 
   case class ReportMessage(lineId: String, status: String)
 
-  val TechnicalSupport = "Technical Support"
-  val BillingSupport = "Billing Support"
-  val GeneralInquiry = "General Inquiry"
+  val TechnicalSupport = "Technical_Support"
+  val BillingSupport = "Billing_Support"
+  val GeneralInquiry = "General_Inquiry"
 
   def createTicket(ticketId: String, category: String, details: String): Ticket = {
     Ticket(ticketId, category, details)
